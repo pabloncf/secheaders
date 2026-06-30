@@ -30,9 +30,7 @@ def test_invalid_format_exits_with_code_2() -> None:
 
 
 def test_flags_are_parsed() -> None:
-    args = parse_args(
-        ["https://example.com", "-o", "report.json", "-f", "json", "-v"]
-    )
+    args = parse_args(["https://example.com", "-o", "report.json", "-f", "json", "-v"])
     assert args.output == "report.json"
     assert args.format == "json"
     assert args.verbose is True

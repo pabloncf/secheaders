@@ -33,6 +33,10 @@ Options:
 | `-f`, `--format` | Output format: `terminal` (default), `json`, `html`, `csv` |
 | `-o`, `--output` | Write the report to a file instead of stdout |
 | `-v`, `--verbose` | Show raw header values and detailed explanations |
+| `--timeout SECONDS` | Per-request timeout (default: 10s) |
+| `--follow-redirects` / `--no-follow-redirects` | Follow redirects (default: on) |
+| `--max-redirects N` | Maximum redirects to follow (default: 5) |
+| `--allow-private` | Allow scanning loopback/private/local hosts |
 | `--version` | Print version and exit |
 
 You can also run it as a module:
