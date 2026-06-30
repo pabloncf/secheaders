@@ -75,3 +75,27 @@ HEADER_WEIGHTS: dict[str, int] = {
 
 # Penalty applied per information-leakage header exposing version info (Phase 4).
 INFO_LEAKAGE_PENALTY = 5
+
+# Penalty applied when a redirect downgraded HTTPS to HTTP.
+DOWNGRADE_PENALTY = 5
+
+# Bonus awarded when HSTS enables preload.
+HSTS_PRELOAD_BONUS = 2
+
+# Fraction of a header's weight credited per status.
+STATUS_CREDIT: dict[Status, float] = {
+    Status.PASS: 1.0,
+    Status.WARN: 0.5,
+    Status.FAIL: 0.0,
+}
+
+# Letter-grade thresholds, ordered from highest. A score >= threshold earns the
+# grade; 100 is the only A+.
+GRADE_THRESHOLDS: tuple[tuple[int, str], ...] = (
+    (100, "A+"),
+    (90, "A"),
+    (80, "B"),
+    (70, "C"),
+    (60, "D"),
+    (0, "F"),
+)

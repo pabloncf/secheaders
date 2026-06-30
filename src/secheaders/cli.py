@@ -23,6 +23,7 @@ from secheaders.scanner import (
     ScanResult,
     scan_url,
 )
+from secheaders.scorer import score
 
 OutputFormat = str
 SUPPORTED_FORMATS: tuple[OutputFormat, ...] = ("terminal", "json", "html", "csv")
@@ -131,7 +132,9 @@ async def _scan(args: argparse.Namespace) -> ScanResult:
 
 def _print_analysis(analysis: AnalysisResult) -> None:
     """Print the analysis as plain text. Replaced by rich output in Phase 5."""
+    result = score(analysis)
     print(f"{analysis.final_url}")
+    print(f"Score: {result.score}/100 ({result.grade})")
     for header in analysis.headers:
         marker = header.status.value.upper()
         value = header.value if header.present else "(missing)"
