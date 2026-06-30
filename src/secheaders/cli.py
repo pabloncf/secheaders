@@ -15,6 +15,7 @@ from collections.abc import Sequence
 import httpx
 
 from secheaders import __version__
+from secheaders.analyzer import AnalysisResult, analyze
 from secheaders.exceptions import SecHeadersError
 from secheaders.scanner import (
     DEFAULT_MAX_REDIRECTS,
@@ -128,13 +129,15 @@ async def _scan(args: argparse.Namespace) -> ScanResult:
         )
 
 
-def _print_raw_result(result: ScanResult) -> None:
-    """Print the raw scan result. Replaced by rich output in Phase 5."""
-    print(f"{result.status_code} {result.final_url} ({result.elapsed_ms:.0f} ms)")
-    if result.https_downgraded:
-        print("WARNING: redirect downgraded https -> http", file=sys.stderr)
-    for name, value in sorted(result.headers.items()):
-        print(f"{name}: {value}")
+def _print_analysis(analysis: AnalysisResult) -> None:
+    """Print the analysis as plain text. Replaced by rich output in Phase 5."""
+    print(f"{analysis.final_url}")
+    for header in analysis.headers:
+        marker = header.status.value.upper()
+        value = header.value if header.present else "(missing)"
+        print(f"[{marker}] {header.name}: {value}")
+        if header.recommendation:
+            print(f"      -> {header.recommendation}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -153,7 +156,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
-    _print_raw_result(result)
+    _print_analysis(analyze(result))
     return EXIT_SUCCESS
 
 
