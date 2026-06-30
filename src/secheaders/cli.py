@@ -13,9 +13,10 @@ import sys
 from collections.abc import Sequence
 
 import httpx
+from rich.console import Console
 
-from secheaders import __version__
-from secheaders.analyzer import AnalysisResult, analyze
+from secheaders import formatter
+from secheaders.analyzer import analyze
 from secheaders.exceptions import SecHeadersError
 from secheaders.scanner import (
     DEFAULT_MAX_REDIRECTS,
@@ -64,11 +65,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="terminal",
         help="Output format (default: terminal).",
     )
-    parser.add_argument(
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="Show raw header values and detailed explanations.",
+        help="Show raw header values and the score breakdown.",
+    )
+    verbosity.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Print only the score and grade (for scripting).",
     )
     parser.add_argument(
         "--timeout",
@@ -99,7 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=formatter.version_banner(),
     )
     return parser
 
@@ -130,17 +138,17 @@ async def _scan(args: argparse.Namespace) -> ScanResult:
         )
 
 
-def _print_analysis(analysis: AnalysisResult) -> None:
-    """Print the analysis as plain text. Replaced by rich output in Phase 5."""
-    result = score(analysis)
-    print(f"{analysis.final_url}")
-    print(f"Score: {result.score}/100 ({result.grade})")
-    for header in analysis.headers:
-        marker = header.status.value.upper()
-        value = header.value if header.present else "(missing)"
-        print(f"[{marker}] {header.name}: {value}")
-        if header.recommendation:
-            print(f"      -> {header.recommendation}")
+def _report(args: argparse.Namespace, scan_result: ScanResult) -> None:
+    """Render the report to the terminal according to the verbosity mode."""
+    analysis = analyze(scan_result)
+    score_result = score(analysis)
+    console = Console()
+    if args.quiet:
+        formatter.render_quiet(score_result, console=console)
+        return
+    formatter.render_terminal(
+        analysis, score_result, console=console, verbose=args.verbose
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -154,12 +162,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     args = parse_args(argv)
     try:
-        result = asyncio.run(_scan(args))
+        scan_result = asyncio.run(_scan(args))
     except SecHeadersError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
-    _print_analysis(analyze(result))
+    _report(args, scan_result)
     return EXIT_SUCCESS
 
 
