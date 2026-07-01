@@ -1,6 +1,5 @@
 # secheaders
 
-[![CI](https://github.com/pabloncf/secheaders/actions/workflows/ci.yml/badge.svg)](https://github.com/pabloncf/secheaders/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/secheaders.svg)](https://pypi.org/project/secheaders/)
 [![Python versions](https://img.shields.io/pypi/pyversions/secheaders.svg)](https://pypi.org/project/secheaders/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -68,17 +67,6 @@ You can also run it as a module:
 
 ```bash
 python -m secheaders https://example.com
-```
-
-## GitHub Action
-
-Gate your pull requests on security headers with the reusable action:
-
-```yaml
-- uses: pabloncf/secheaders@v1
-  with:
-    url: https://example.com
-    fail-under: "80"
 ```
 
 ## Development
