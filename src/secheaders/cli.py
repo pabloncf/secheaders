@@ -16,7 +16,7 @@ import httpx
 from rich.console import Console
 from rich.progress import Progress
 
-from secheaders import formatter
+from secheaders import exporters, formatter
 from secheaders.analyzer import analyze
 from secheaders.batch import (
     DEFAULT_CONCURRENCY,
@@ -25,7 +25,7 @@ from secheaders.batch import (
     read_urls,
     scan_all,
 )
-from secheaders.exceptions import SecHeadersError
+from secheaders.exceptions import OutputError, SecHeadersError
 from secheaders.scanner import (
     DEFAULT_MAX_REDIRECTS,
     DEFAULT_TIMEOUT_SECONDS,
@@ -132,6 +132,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow scanning loopback/private/local hosts.",
     )
     parser.add_argument(
+        "--fail-under",
+        type=int,
+        default=None,
+        metavar="SCORE",
+        help="Exit with code 1 if any score is below SCORE (for CI/CD).",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=formatter.version_banner(),
@@ -203,26 +210,73 @@ async def _scan_batch(args: argparse.Namespace, urls: list[str]) -> BatchResult:
             )
 
 
-def _report_single(args: argparse.Namespace, scan_result: ScanResult) -> None:
-    """Render a single-URL report according to the verbosity mode."""
+def _write_output(text: str, path: str) -> None:
+    """Write exported text to a file, mapping IO errors to OutputError."""
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+    except OSError as exc:
+        raise OutputError(
+            f"Could not write report to '{path}': {exc.strerror or exc}. "
+            "Check the path and write permissions."
+        ) from exc
+
+
+def _emit_export(args: argparse.Namespace, payloads: list[dict]) -> None:
+    """Serialize payloads and send them to --output or stdout."""
+    document = exporters.export(payloads, args.format)
+    if args.output:
+        _write_output(document, args.output)
+    else:
+        # print via stdout directly; no rich styling for machine formats.
+        sys.stdout.write(document + "\n")
+
+
+def _report_single(args: argparse.Namespace, scan_result: ScanResult) -> int:
+    """Render or export a single-URL report; return its score."""
     analysis = analyze(scan_result)
     score_result = score(analysis)
+    if args.format != "terminal":
+        _emit_export(args, [exporters.to_dict(analysis, score_result)])
+        return score_result.score
     console = Console()
     if args.quiet:
         formatter.render_quiet(score_result, console=console)
-        return
-    formatter.render_terminal(
-        analysis, score_result, console=console, verbose=args.verbose
-    )
+    else:
+        formatter.render_terminal(
+            analysis, score_result, console=console, verbose=args.verbose
+        )
+    return score_result.score
+
+
+def _batch_payloads(batch: BatchResult) -> list[dict]:
+    """Build export payloads for a batch, including error entries."""
+    payloads: list[dict] = []
+    for item in batch.items:
+        if item.analysis is not None and item.score is not None:
+            payloads.append(exporters.to_dict(item.analysis, item.score))
+        else:
+            payloads.append({"url": item.url, "error": item.error})
+    return payloads
 
 
 def _report_batch(args: argparse.Namespace, batch: BatchResult) -> None:
-    """Render a batch report according to the verbosity mode."""
+    """Render or export a batch report."""
+    if args.format != "terminal":
+        _emit_export(args, _batch_payloads(batch))
+        return
     console = Console()
     if args.quiet:
         formatter.render_batch_quiet(batch, console=console)
         return
     formatter.render_batch(batch, console=console)
+
+
+def _threshold_failed(args: argparse.Namespace, scores: list[int | None]) -> bool:
+    """Return True if --fail-under is set and any score is below it or missing."""
+    if args.fail_under is None:
+        return False
+    return any(value is None or value < args.fail_under for value in scores)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -236,17 +290,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     args = parse_args(argv)
     try:
+        scores: list[int | None]
         if args.input:
             urls = read_urls(args.input)
             batch = asyncio.run(_scan_batch(args, urls))
             _report_batch(args, batch)
+            scores = [item.score.score if item.score else None for item in batch.items]
         else:
             scan_result = asyncio.run(_scan(args))
-            _report_single(args, scan_result)
+            scores = [_report_single(args, scan_result)]
     except SecHeadersError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    if _threshold_failed(args, scores):
+        return EXIT_THRESHOLD
     return EXIT_SUCCESS
 
 

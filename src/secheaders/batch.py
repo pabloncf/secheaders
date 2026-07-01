@@ -18,7 +18,7 @@ from pathlib import Path
 
 import httpx
 
-from secheaders.analyzer import analyze
+from secheaders.analyzer import AnalysisResult, analyze
 from secheaders.exceptions import InputError, SecHeadersError
 from secheaders.scanner import (
     DEFAULT_MAX_REDIRECTS,
@@ -36,6 +36,7 @@ class BatchItem:
 
     url: str
     score: ScoreResult | None = None
+    analysis: AnalysisResult | None = None
     error: str | None = None
 
     @property
@@ -134,7 +135,8 @@ async def scan_all(
                     max_redirects=max_redirects,
                     allow_private=allow_private,
                 )
-                item = BatchItem(url=url, score=score(analyze(scan_result)))
+                analysis = analyze(scan_result)
+                item = BatchItem(url=url, score=score(analysis), analysis=analysis)
             except SecHeadersError as exc:
                 item = BatchItem(url=url, error=str(exc))
         if on_complete is not None:

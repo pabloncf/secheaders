@@ -1,11 +1,33 @@
-"""Tests for the CLI skeleton (Phase 1)."""
+"""Tests for the CLI (parsing plus end-to-end behavior)."""
 
 from __future__ import annotations
 
+import json
+
+import httpx
 import pytest
+import respx
 
 from secheaders import __version__
-from secheaders.cli import EXIT_SUCCESS, main, parse_args
+from secheaders.cli import (
+    EXIT_ERROR,
+    EXIT_SUCCESS,
+    EXIT_THRESHOLD,
+    main,
+    parse_args,
+)
+
+STRONG_RESPONSE_HEADERS = {
+    "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+    "content-security-policy": "default-src 'self'",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "permissions-policy": "geolocation=()",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "cross-origin-opener-policy": "same-origin",
+    "cross-origin-resource-policy": "same-origin",
+    "cross-origin-embedder-policy": "require-corp",
+}
 
 
 def test_url_or_input_is_required() -> None:
@@ -49,7 +71,68 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
     assert __version__ in capsys.readouterr().out
 
 
+@respx.mock
 def test_main_returns_success(capsys: pytest.CaptureFixture[str]) -> None:
+    respx.get("https://example.com").mock(return_value=httpx.Response(200))
     exit_code = main(["https://example.com"])
     assert exit_code == EXIT_SUCCESS
     assert "example.com" in capsys.readouterr().out
+
+
+@respx.mock
+def test_json_export_to_stdout(capsys: pytest.CaptureFixture[str]) -> None:
+    respx.get("https://example.com").mock(
+        return_value=httpx.Response(200, headers=STRONG_RESPONSE_HEADERS)
+    )
+    exit_code = main(["https://example.com", "--format", "json"])
+    assert exit_code == EXIT_SUCCESS
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed["grade"] == "A+"
+
+
+@respx.mock
+def test_output_writes_file(tmp_path) -> None:
+    respx.get("https://example.com").mock(
+        return_value=httpx.Response(200, headers=STRONG_RESPONSE_HEADERS)
+    )
+    out = tmp_path / "report.json"
+    exit_code = main(["https://example.com", "--format", "json", "--output", str(out)])
+    assert exit_code == EXIT_SUCCESS
+    assert json.loads(out.read_text())["grade"] == "A+"
+
+
+@respx.mock
+def test_fail_under_returns_threshold_when_below(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    respx.get("https://example.com").mock(return_value=httpx.Response(200))
+    exit_code = main(["https://example.com", "--fail-under", "80", "--quiet"])
+    assert exit_code == EXIT_THRESHOLD
+
+
+@respx.mock
+def test_fail_under_passes_when_above(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    respx.get("https://example.com").mock(
+        return_value=httpx.Response(200, headers=STRONG_RESPONSE_HEADERS)
+    )
+    exit_code = main(["https://example.com", "--fail-under", "80", "--quiet"])
+    assert exit_code == EXIT_SUCCESS
+
+
+@respx.mock
+def test_output_error_returns_exit_error() -> None:
+    respx.get("https://example.com").mock(
+        return_value=httpx.Response(200, headers=STRONG_RESPONSE_HEADERS)
+    )
+    exit_code = main(
+        [
+            "https://example.com",
+            "--format",
+            "json",
+            "--output",
+            "/nonexistent-dir/report.json",
+        ]
+    )
+    assert exit_code == EXIT_ERROR

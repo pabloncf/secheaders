@@ -30,14 +30,28 @@ Options:
 
 | Flag | Description |
 | --- | --- |
+| `-i`, `--input FILE` | Scan every URL in FILE (one per line; `#` comments allowed) |
+| `--concurrency N` | Max simultaneous requests in batch mode (default: 10) |
 | `-f`, `--format` | Output format: `terminal` (default), `json`, `html`, `csv` |
 | `-o`, `--output` | Write the report to a file instead of stdout |
-| `-v`, `--verbose` | Show raw header values and detailed explanations |
+| `-v`, `--verbose` | Show raw header values and the score breakdown |
+| `-q`, `--quiet` | Print only the score and grade (for scripting) |
+| `--fail-under SCORE` | Exit with code 1 if any score is below SCORE (for CI/CD) |
 | `--timeout SECONDS` | Per-request timeout (default: 10s) |
 | `--follow-redirects` / `--no-follow-redirects` | Follow redirects (default: on) |
 | `--max-redirects N` | Maximum redirects to follow (default: 5) |
 | `--allow-private` | Allow scanning loopback/private/local hosts |
 | `--version` | Print version and exit |
+
+### CI/CD example
+
+```bash
+# Fail the pipeline if the site scores below 80.
+secheaders https://example.com --fail-under 80 --quiet
+
+# Export a JSON report for a batch of URLs.
+secheaders --input urls.txt --format json --output report.json
+```
 
 You can also run it as a module:
 

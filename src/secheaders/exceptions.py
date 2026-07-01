@@ -20,6 +20,10 @@ class InputError(SecHeadersError):
     """The batch input file is missing, unreadable, or empty."""
 
 
+class OutputError(SecHeadersError):
+    """The report could not be written to the requested output path."""
+
+
 class ScanError(SecHeadersError):
     """A scan failed for a reason that does not fit a more specific error."""
 
