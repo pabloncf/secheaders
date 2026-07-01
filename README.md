@@ -1,5 +1,10 @@
 # secheaders
 
+[![CI](https://github.com/pabloncf/secheaders/actions/workflows/ci.yml/badge.svg)](https://github.com/pabloncf/secheaders/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/secheaders.svg)](https://pypi.org/project/secheaders/)
+[![Python versions](https://img.shields.io/pypi/pyversions/secheaders.svg)](https://pypi.org/project/secheaders/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > Scan URLs for HTTP security headers, score their posture (0–100 + letter
 > grade), and get actionable fix recommendations.
 
@@ -8,15 +13,21 @@ headers of any website, grades how well it defends against common web attacks
 (XSS, clickjacking, MIME sniffing, protocol downgrade…), and tells you exactly
 what to fix.
 
-## Status
+## Demo
 
-🚧 **Early development.** Phase 1 (CLI skeleton) is in place; scanning,
-analysis, scoring, and reporting land in the following phases.
+<!-- Record with `vhs` or `asciinema` and drop the GIF here:
+     vhs < demo.tape  ->  demo.gif -->
+![secheaders demo](docs/demo.gif)
 
 ## Installation
 
 ```bash
-# from source (development)
+pip install secheaders
+```
+
+From source (development):
+
+```bash
 pip install -e ".[dev]"
 ```
 
@@ -59,6 +70,17 @@ You can also run it as a module:
 python -m secheaders https://example.com
 ```
 
+## GitHub Action
+
+Gate your pull requests on security headers with the reusable action:
+
+```yaml
+- uses: pabloncf/secheaders@v1
+  with:
+    url: https://example.com
+    fail-under: "80"
+```
+
 ## Development
 
 ```bash
@@ -67,6 +89,8 @@ pytest
 ruff check .
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+
 ## License
 
-MIT © Pablo
+[MIT](LICENSE) © Pablo
