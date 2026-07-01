@@ -40,6 +40,15 @@ class ScoreResult:
     penalty: int
     breakdown: list[ScoreItem] = field(default_factory=list)
 
+    @property
+    def breakdown_counts(self) -> dict[Status, int]:
+        """Count weighted headers by status (PASS/WARN/FAIL)."""
+        counts = {Status.PASS: 0, Status.WARN: 0, Status.FAIL: 0}
+        for item in self.breakdown:
+            if item.status in counts:
+                counts[item.status] += 1
+        return counts
+
 
 def grade_for(score: int) -> str:
     """Return the letter grade for a 0-100 score.

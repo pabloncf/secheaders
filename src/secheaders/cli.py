@@ -1,8 +1,8 @@
 """Command-line interface for secheaders.
 
 This module owns argument parsing and the top-level entry point. It wires the
-scanner into the CLI; analysis, scoring, and formatting are added in later
-phases, so for now it prints the raw extracted headers.
+scanner, analyzer, scorer, and formatter together for both single-URL and batch
+(``--input``) scanning.
 """
 
 from __future__ import annotations
@@ -14,9 +14,17 @@ from collections.abc import Sequence
 
 import httpx
 from rich.console import Console
+from rich.progress import Progress
 
 from secheaders import formatter
 from secheaders.analyzer import analyze
+from secheaders.batch import (
+    DEFAULT_CONCURRENCY,
+    BatchItem,
+    BatchResult,
+    read_urls,
+    scan_all,
+)
 from secheaders.exceptions import SecHeadersError
 from secheaders.scanner import (
     DEFAULT_MAX_REDIRECTS,
@@ -49,7 +57,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "url",
+        nargs="?",
+        default=None,
         help="Target URL to scan (e.g. https://example.com).",
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        metavar="FILE",
+        default=None,
+        help="Scan every URL listed in FILE (one per line; # comments allowed).",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_CONCURRENCY,
+        metavar="N",
+        help=(
+            "Max simultaneous requests in batch mode "
+            f"(default: {DEFAULT_CONCURRENCY})."
+        ),
     )
     parser.add_argument(
         "-o",
@@ -113,7 +140,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments.
+    """Parse and validate command-line arguments.
+
+    Exactly one of a positional ``url`` or ``--input`` must be provided.
 
     Args:
         argv: Argument list to parse. Defaults to ``sys.argv[1:]``.
@@ -122,7 +151,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         The parsed arguments namespace.
     """
     parser = build_parser()
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if bool(args.url) == bool(args.input):
+        parser.error("provide either a URL or --input FILE, but not both")
+    return args
 
 
 async def _scan(args: argparse.Namespace) -> ScanResult:
@@ -138,8 +170,41 @@ async def _scan(args: argparse.Namespace) -> ScanResult:
         )
 
 
-def _report(args: argparse.Namespace, scan_result: ScanResult) -> None:
-    """Render the report to the terminal according to the verbosity mode."""
+async def _scan_batch(args: argparse.Namespace, urls: list[str]) -> BatchResult:
+    """Run a batch scan with a shared client and an optional progress bar."""
+    show_progress = not args.quiet and sys.stderr.isatty()
+    async with httpx.AsyncClient() as client:
+        if not show_progress:
+            return await scan_all(
+                urls,
+                client=client,
+                concurrency=args.concurrency,
+                timeout=args.timeout,
+                follow_redirects=args.follow_redirects,
+                max_redirects=args.max_redirects,
+                allow_private=args.allow_private,
+            )
+        # Progress bar goes to stderr so stdout stays pipeable.
+        with Progress(console=Console(stderr=True)) as progress:
+            task = progress.add_task("Scanning", total=len(urls))
+
+            def advance(_: BatchItem) -> None:
+                progress.advance(task)
+
+            return await scan_all(
+                urls,
+                client=client,
+                concurrency=args.concurrency,
+                timeout=args.timeout,
+                follow_redirects=args.follow_redirects,
+                max_redirects=args.max_redirects,
+                allow_private=args.allow_private,
+                on_complete=advance,
+            )
+
+
+def _report_single(args: argparse.Namespace, scan_result: ScanResult) -> None:
+    """Render a single-URL report according to the verbosity mode."""
     analysis = analyze(scan_result)
     score_result = score(analysis)
     console = Console()
@@ -149,6 +214,15 @@ def _report(args: argparse.Namespace, scan_result: ScanResult) -> None:
     formatter.render_terminal(
         analysis, score_result, console=console, verbose=args.verbose
     )
+
+
+def _report_batch(args: argparse.Namespace, batch: BatchResult) -> None:
+    """Render a batch report according to the verbosity mode."""
+    console = Console()
+    if args.quiet:
+        formatter.render_batch_quiet(batch, console=console)
+        return
+    formatter.render_batch(batch, console=console)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -162,12 +236,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     args = parse_args(argv)
     try:
-        scan_result = asyncio.run(_scan(args))
+        if args.input:
+            urls = read_urls(args.input)
+            batch = asyncio.run(_scan_batch(args, urls))
+            _report_batch(args, batch)
+        else:
+            scan_result = asyncio.run(_scan(args))
+            _report_single(args, scan_result)
     except SecHeadersError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
-    _report(args, scan_result)
     return EXIT_SUCCESS
 
 

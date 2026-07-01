@@ -5,14 +5,20 @@ from __future__ import annotations
 import pytest
 
 from secheaders import __version__
-from secheaders.cli import EXIT_SUCCESS, build_parser, main, parse_args
+from secheaders.cli import EXIT_SUCCESS, main, parse_args
 
 
-def test_url_is_required() -> None:
-    parser = build_parser()
+def test_url_or_input_is_required() -> None:
+    # Neither a URL nor --input given -> usage error.
     with pytest.raises(SystemExit) as exc:
-        parser.parse_args([])
-    assert exc.value.code == 2  # argparse usage error
+        parse_args([])
+    assert exc.value.code == 2
+
+
+def test_url_and_input_are_mutually_exclusive() -> None:
+    with pytest.raises(SystemExit) as exc:
+        parse_args(["https://example.com", "--input", "urls.txt"])
+    assert exc.value.code == 2
 
 
 def test_defaults() -> None:

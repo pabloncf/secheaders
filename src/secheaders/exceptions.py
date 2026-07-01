@@ -16,6 +16,10 @@ class InvalidURL(SecHeadersError):
     """The target URL is malformed or uses an unsupported scheme."""
 
 
+class InputError(SecHeadersError):
+    """The batch input file is missing, unreadable, or empty."""
+
+
 class ScanError(SecHeadersError):
     """A scan failed for a reason that does not fit a more specific error."""
 

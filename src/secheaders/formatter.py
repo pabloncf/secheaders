@@ -18,6 +18,7 @@ from rich.text import Text
 
 from secheaders import __version__
 from secheaders.analyzer import AnalysisResult
+from secheaders.batch import BatchResult
 from secheaders.constants import Status
 from secheaders.scorer import ScoreResult
 
@@ -133,3 +134,60 @@ def render_terminal(
     console.print(_status_table(analysis, verbose=verbose))
     if verbose:
         console.print(_breakdown_table(score))
+
+
+def render_batch(batch: BatchResult, *, console: Console) -> None:
+    """Render a comparative table for a batch scan, sorted by score.
+
+    Args:
+        batch: The batch result.
+        console: Injected console to render to.
+    """
+    table = Table(title="Batch results", expand=True)
+    table.add_column("URL", style="bold", overflow="fold")
+    table.add_column("Score", justify="right")
+    table.add_column("Grade", justify="center")
+    table.add_column("Pass/Warn/Fail", justify="center")
+    table.add_column("Note", overflow="fold")
+
+    for item in batch.sorted_by_score():
+        if item.score is None:
+            table.add_row(
+                item.url,
+                Text("—", style="dim"),
+                Text("—", style="dim"),
+                "—",
+                Text(item.error or "error", style="red"),
+            )
+            continue
+        counts = (
+            f"{item.score.breakdown_counts[Status.PASS]}/"
+            f"{item.score.breakdown_counts[Status.WARN]}/"
+            f"{item.score.breakdown_counts[Status.FAIL]}"
+        )
+        style = _grade_style(item.score.grade)
+        table.add_row(
+            item.url,
+            f"{item.score.score}",
+            Text(item.score.grade, style=style),
+            counts,
+            "",
+        )
+    console.print(table)
+
+
+def render_batch_quiet(batch: BatchResult, *, console: Console) -> None:
+    """Print one line per URL for scripting: ``url score/100 grade``.
+
+    Failed URLs print ``url error <message>``.
+
+    Args:
+        batch: The batch result.
+        console: Injected console (no color/markup is emitted).
+    """
+    for item in batch.items:
+        if item.score is None:
+            line = f"{item.url} error {item.error}"
+        else:
+            line = f"{item.url} {item.score.score}/100 {item.score.grade}"
+        console.print(line, markup=False, highlight=False)
